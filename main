@@ -1,0 +1,781 @@
+#helper functions, for manipulating outputs such string objects
+
+#here is the set of all functions previously defined
+
+#going to separate all functions from the more meaty sympy stuff
+        
+from sympy import Eq, simplify
+
+#function to split mathematical expressions along the line of the least nested + or minus
+def split_expression(expression):
+    stack = []
+    max_nesting_level = 0
+    max_nesting_level_index = None
+
+    for i, char in enumerate(expression):
+        if char == '(':
+            stack.append(i)
+        elif char == ')':
+            stack.pop()
+        elif char in '+-' and not stack:
+            nesting_level = expression[:i].count('(') - expression[:i].count(')')
+            if nesting_level >= max_nesting_level:
+                max_nesting_level = nesting_level
+                max_nesting_level_index = i
+
+    if max_nesting_level_index is None:
+        return [expression]
+    else:
+        return [expression[:max_nesting_level_index], expression[max_nesting_level_index:]]
+
+def recursive_split_odd(expression, n):
+    if n == 0:
+        return [expression]
+    else:
+        split = split_expression(expression)
+        if len(split) == 1:
+            return [expression]
+        else:
+            left_expression = split[0]
+            right_expression = split[1]
+            if len(left_expression) > len(right_expression):
+                return recursive_split(left_expression, n-1) + recursive_split(right_expression, n-1)
+            else:
+                return recursive_split(right_expression, n-1) + recursive_split(left_expression, n-1)    
+            
+def recursive_split_even(expression, n):
+    if n == 0:
+        return [expression]
+    else:
+        split = split_expression(expression)
+        if len(split) == 1:
+            return [expression]
+        else:
+            left_expression = split[0]
+            right_expression = split[1]
+            return recursive_split_even(left_expression, n-1) + recursive_split_even(right_expression, n-1)  
+        
+def dot_vectorEq(equalityObj,randVec):
+    left = equalityObj.lhs
+    right = equalityObj.rhs
+    leftPrime = left.dot(randVec)
+    rightPrime = right.dot(randVec)
+    equalityObjPrime = Eq(leftPrime, rightPrime)
+    return equalityObjPrime        
+
+
+def LatexProper(item): #sometimes sympy can put too many \\ for latex, so trim one with this function
+    tex = latex(item)
+    input_string = tex
+    output_string = input_string.replace('\\\\left', r'\left')
+    # Use the `replace()` method to replace any occurrences of "\\right" with "\right"
+    output_string = output_string.replace('\\\\right', r'\right')
+    #stringify = str(output_string)
+    return output_string
+
+def replace_substring(string0):
+    #realistically i think i could define a dictionary or something to do all these replacements but either way have to specify what the phrases look like eventually
+    #i know where's a way to make generalized expressions work with this method but tbh cba so just hard code each replacement
+    #for the functions, need to check if need for temp and pressure as well
+    string1 = string0.replace('\\operatorname{Ur}{', '\\operatorname{Ur}_{')
+    string2 = string1.replace('\\operatorname{Uth}{', '\\operatorname{Uth}_{')
+    string3 = string2.replace('\\operatorname{Uph}{', '\\operatorname{Uph}_{')
+    string4 = string3.replace('\\operatorname{Br}{', '\\operatorname{Br}_{')
+    string5 = string4.replace('\\operatorname{Bth}{', '\\operatorname{Bth}_{')
+    string6 = string5.replace('\\operatorname{Bph}{', '\\operatorname{Bph}_{')
+    string7 = string6.replace('\\operatorname{Wr}{', '\\operatorname{Wr}_{')
+    string8 = string7.replace('\\operatorname{Wth}{', '\\operatorname{Wth}_{')
+    string9 = string8.replace('\\operatorname{Wph}{', '\\operatorname{Wph}_{')
+    #for Ynm series coefficients
+    string10 = string9.replace('a{\\left', 'a_{\\left')
+    string11 = string10.replace('b{\\left', 'b_{\\left')
+    string12 = string11.replace('d{\\left', 'd_{\\left')
+    string13 = string12.replace('f{\\left', 'f_{\\left')
+    string14 = string13.replace('g{\\left', 'g_{\\left')
+    string15 = string14.replace('h{\\left', 'h_{\\left')
+    #for Ynms
+    string16 = string15.replace('\\left(\\mathbf{{theta}_{c}},\\mathbf{{phi}_{c}}\\right)','_{\\left(\\mathbf{{theta}_{c}},\\mathbf{{phi}_{c}}\\right)}')
+    #temp and pressure
+    string17 = string16.replace('T{\\left(','T_{\\left(')
+    string18 = string17.replace('P{\\left(','P_{\\left(')
+    string19 = string18.replace('\\mathbf{{theta}_{c}}','\\mathbf{\\theta_{c}}')
+    string20 = string19.replace('\\mathbf{{phi}_{c}}','\\mathbf{\\phi_{c}}')
+    return string20
+
+def find_plus_minus_equals_indices(s):
+    # Find all instances of '+' and '-' characters
+    plus_minus_indices = [i for i in range(len(s)) if s[i] in ['+', '-']]
+    # Find how many sets of \left and \right surround each sub-expression
+    left_count = 0
+    right_count = 0
+    nesting_levels = []
+    for i in range(len(s)):
+        if s[i:i+5] == '\\left':
+            left_count += 1
+        elif s[i:i+6] == '\\right':
+            right_count += 1
+        nesting_levels.append(left_count - right_count)
+    # Find all instances of '=' characters
+    equals_indices = [i for i in range(len(s)) if s[i] == '=']
+    # Create a numpy array with columns {i, O} where i corresponds to the index of each of these plus, minus and equals symbols,
+    # and O corresponds to how 'nested' these math symbols are inside of the expression.
+    output_array = np.zeros((len(plus_minus_indices) + len(equals_indices), 2))
+    # Fill in plus and minus indices
+    for i in range(len(plus_minus_indices)):
+        output_array[i, 0] = plus_minus_indices[i]
+        output_array[i, 1] = nesting_levels[plus_minus_indices[i]]
+    # Fill in equals indices
+    for i in range(len(equals_indices)):
+        output_array[len(plus_minus_indices) + i, 0] = equals_indices[i]
+        output_array[len(plus_minus_indices) + i, 1] = 1000
+    return output_array
+
+def split_string3(s, arr, n):
+    # Create a list of indices to split the string
+    eqind = arr[-1,0]
+    split_indices = [0]
+    for i in range(len(arr)-1):
+        if (arr[i,0] < eqind and arr[i+1,0] > eqind):
+            if arr[i, 1] <= n:
+                split_indices.append(int(arr[i, 0]))
+                split_indices.append(int(eqind))
+            else: 
+                split_indices.append(int(eqind))
+        else:
+            if arr[i, 1] <= n:
+                split_indices.append(int(arr[i, 0]))      
+    split_indices.append(len(s))
+    # Split the string into substrings
+    substrings = []
+    for i in range(len(split_indices)-1):
+        substrings.append(s[split_indices[i]:split_indices[i+1]])
+    return substrings
+
+def aligner(List):
+    String = "\\begin{align}"
+    String += List[0]
+    for i in range(len(List)-1):
+        String += "\\\\"
+        String += "&"
+        String += List[i+1]
+        
+    String += "\\end{align}"
+    return String
+
+def Latexoutput(symp, n):
+    String = str(latex(symp))
+    StringPrime = replace_substring(String)
+    arr = find_plus_minus_equals_indices(StringPrime)
+    splitList = split_string3(StringPrime, arr, n)
+    print(aligner(splitList))
+    
+def LatexNoAlign(symp):
+    String = str(latex(symp))
+    StringPrime = replace_substring(String)
+    print(StringPrime)
+
+def latexVectorEqComponents(symp):
+    sympArr = [dot_vectorEq(symp, c.i),dot_vectorEq(symp, c.j),dot_vectorEq(symp, c.k)] 
+    for i in range(3):
+        String = str(latex(sympArr[i]))
+        StringPrime = replace_substring(String)
+        print(StringPrime)
+#might also want to insert some other things that are encapsulated into latexproper or something
+
+def latexVectorComponents(symp):
+    sympArr = [symp.dot(c.i),symp.dot(c.j),symp.dot(c.k)] 
+    for i in range(3):
+        String = str(latex(sympArr[i]))
+        StringPrime = replace_substring(String)
+        print(StringPrime)
+        
+
+
+def simplify_eq_sides(eq):
+    lhs, rhs = eq.lhs, eq.rhs
+    lhs_simplified = simplify(lhs)
+    rhs_simplified = simplify(rhs)
+    simplified_eq = Eq(lhs_simplified, rhs_simplified)
+    return simplified_eq        
+
+def expander(symp):
+    size = len(symp)
+    Arr = []
+    for i in range(size):
+        sympObjExpand = expand(symp[i])
+        Arr.append(sympObjExpand)
+    return Arr    
+
+def factorer(symp):
+    size = len(symp)
+    Arr = []
+    for i in range(size):
+        sympObjMod = factor(symp[i])
+        Arr.append(sympObjMod)
+    return Arr    
+
+def collector(symp):
+    size = len(symp)
+    Arr = []
+    for i in range(size):
+        sympObjMod = collect(symp[i])
+        Arr.append(sympObjMod)
+    return Arr 
+
+def canceler(symp):
+    size = len(symp)
+    Arr = []
+    for i in range(size):
+        sympObjMod = cancel(symp[i])
+        Arr.append(sympObjMod)
+    return Arr 
+
+def aparter(symp):
+    size = len(symp)
+    Arr = []
+    for i in range(size):
+        sympObjMod = apart(symp[i])
+        Arr.append(sympObjMod)
+    return Arr 
+
+def trigsimper(symp):
+    size = len(symp)
+    Arr = []
+    for i in range(size):
+        sympObjMod = trigsimp(symp[i])
+        Arr.append(sympObjMod)
+    return Arr 
+
+def logcombiner(symp):
+    size = len(symp)
+    Arr = []
+    for i in range(size):
+        sympObjMod = logcombine(symp[i])
+        Arr.append(sympObjMod)
+    return Arr 
+
+def powsimper(symp):
+    size = len(symp)
+    Arr = []
+    for i in range(size):
+        sympObjMod = powsimp(symp[i])
+        Arr.append(sympObjMod)
+    return Arr 
+
+
+def combo(symp):
+    step1 = expander(symp)
+    step2 = factorer(step1)
+    step3 = canceler(step2)
+    step4 = trigsimper(step3)
+    step5 = logcombiner(step4)
+    step6 = powsimper(step5)
+    return step6
+
+def wombo(symp):
+    step1 = expander(symp)
+    step2 = collect(step1, [a,b,d,g,T2])
+    step3 = trigsimp(step2)
+    step4 = cancel(step3)
+    step5 = powsimp(step4)
+    return step5
+
+def vecSplitter(symp): #returns list object with the vector split into components
+    Objr = symp.dot(c.i)
+    Objth = symp.dot(c.j)
+    Objph = symp.dot(c.k)
+    arr = [Objr,Objth,Objph]
+    return arr
+
+def BeegSplitter2(sympList):
+    size = len(sympList)
+    Beegi = sympList[0][0]
+    Beegj = sympList[0][1]
+    Beegk = sympList[0][2]
+    for i in range(size-1):
+        Beegi += sympList[i+1][0]
+        Beegj += sympList[i+1][1]
+        Beegk += sympList[i+1][2]
+    return Beegi, Beegj, Beegk
+
+#cutting the very repetitive 'arguments' off of all of the random functions
+def trimArgs(string0):
+    string1 = string0.replace('{\\left(\\mathbf{{r}_{c}},\\mathbf{{theta}_{c}},\\mathbf{{phi}_{c}},t \\right)}', '')
+    return string1
+
+#no need for bold, takes up tons of latex space
+def trimBold(string0):
+    string1 = string0.replace('\\mathbf{\\theta_{c}}','\\theta_c')
+    string2 = string1.replace('\\mathbf{\\phi_{c}}','\\phi_c')
+    string3 = string2.replace('\\mathbf{{r}_{c}}','r_c')
+    return string3
+
+
+
+#consolidation of args, makes sure we have substringing for things, and trims bold    
+def LatexNoAlignTrim2(symp):
+    String = str(latex(symp))
+    StringPrime = trimArgs(String)
+    StringPrime2 = replace_substring(StringPrime)
+    SP3 = trimBold(StringPrime2)
+    return SP3    
+
+
+#might split this up?
+#this function does a lot of work to trim down different expressions within the string outputs of sympy so the latex is shorter
+#looks like sections: trims arbitrary substrinc C which stands for coordinate system c
+#actually interesting we could look into representing alternative coord systems
+#turn partials into little deltas
+#trim all aribtrary c substrings in the next line lol
+#double partials to double dels
+#replace sines and cosines with S, C and a subscript of the state variable being used
+def abstracter(stri):
+    string1 = stri.replace('\\frac{\\partial}{\\partial \\phi_c}','\\delta_{\\phi}')
+    string2 = string1.replace('\\frac{\\partial}{\\partial \\theta_c}','\\delta_{\\theta}')
+    string3 = string2.replace('\\frac{\\partial}{\\partial r_c}','\\delta_r')
+    string3 = string2.replace('\\frac{\\partial}{\\partial t}','\\delta_t')
+    string4 = string3.replace('_c','') #NOOOOOOOOTE THIS LINE IS SUPER IMPORTANT, IF IT IS SHIFTED UP IN PROCESS NEED TO MAKE OTHER ADJUSTMENTS TO COMPENSATE!!
+    string5 = string4.replace('\\frac{\\partial^{2}}{\\partial r\\partial \\phi}','\\delta_r\\delta_{\\phi}')
+    string6 = string5.replace('\\frac{\\partial^{2}}{\\partial r\\partial \\theta}','\\delta_r\\delta_{\\theta}')
+    string7 = string6.replace('\\frac{\\partial^{2}}{\\partial \\phi\\partial \\theta}','\\delta_{\\phi}\\delta_{\\theta}')
+    string8 = string7.replace('\\frac{\\partial^{2}}{\\partial \\phi\\partial r}','\\delta_{\\phi}\\delta_r')
+    string9 = string8.replace('\\frac{\\partial^{2}}{\\partial \\theta\\partial \\phi}','\\delta_{\\theta}\\delta_{\\phi}')
+    string10 = string9.replace('\\frac{\\partial^{2}}{\\partial \\theta\\partial r}','\\delta_{\\theta}\\delta_r')
+    string11 = string10.replace('\\frac{d}{d \\phi}','\\delta^o_{\\phi}')
+    string12 = string11.replace('\\frac{d}{d \\theta}','\\delta^o_{\\theta}')
+    string13 = string12.replace('\\frac{\\partial}{\\partial r}','\\delta_r')
+    string14 = string13.replace('\\sin{\\left(\\theta \\right)}','S_{\\theta}')
+    string15 = string14.replace('\\sin{\\left(\\phi \\right)}','S_{\\phi}')
+    string16 = string15.replace('\\cos{\\left(\\theta \\right)}','C_{\\theta}')
+    string17 = string16.replace('\\cos{\\left(\\phi \\right)}','C_{\\phi}')
+    return str(string17)
+
+
+
+#THIS is where we start to get a bit fancy and start to boil together actual operations into condensed versions
+#1st set is to take totalderivativewrt_stateVar*r +/- partial_r*(r*theta)
+#and a similar expression with total derivative, i think what i did was turn these expressions into 'operators'
+#SINCE they were being applied onto something else which i was interested in
+#next set of a bunch of expressions was to essentially take a large amount of stuff which was applied upon each individual scalar func a,b,g,d 
+#so essentially many lines of taking (big transform)(scalar func) =====> op#
+#soooooo this is kinda the place i want to replace all Op's with \Chi to look more professional lol \\Chi
+def abs2(s0):
+    s1 = s0.replace('\\left(- \\delta^o_{\\theta} r + \\delta_r r \\theta\\right)','\\chi_1')
+    s2 = s1.replace('\\left(\\delta^o_{\\phi} r - \\delta_r \\phi r S_{\\theta}\\right)','\\chi_2')
+    s3 = s2.replace('\\left(- \\delta_{\\phi} r \\theta + \\delta_{\\theta} \\phi r S_{\\theta}\\right)','\\chi_3')
+    s4 = s3.replace('\\frac{- \\delta_{\\phi} \\left(- \\frac{Op_2 d}{S_{\\theta}}\\right) + \\delta_{\\theta} \\left(- Op_1 d S_{\\theta}\\right)}{r^{2} S_{\\theta}})','\\chi_4d')
+    s5 = s4.replace('\\frac{- \\delta_{\\phi} \\left(- \\frac{Op_2 g}{S_{\\theta}}\\right) + \\delta_{\\theta} \\left(- Op_1 g S_{\\theta}\\right)}{r^{2} S_{\\theta}})','\\chi_4g')
+    s6 = s5.replace('\\frac{- \\delta_{\\phi} \\left(- \\frac{Op_2 a}{S_{\\theta}}\\right) + \\delta_{\\theta} \\left(- Op_1 a S_{\\theta}\\right)}{r^{2} S_{\\theta}})','\\chi_4a')
+    s7 = s6.replace('\\frac{- \\delta_{\\phi} \\left(- \\frac{Op_2 b}{S_{\\theta}}\\right) + \\delta_{\\theta} \\left(- Op_1 b S_{\\theta}\\right)}{r^{2} S_{\\theta}})','\\chi_4b')
+    s8 = s7.replace('\\frac{- \\delta_r \\left(- Op_1 d S_{\\theta}\\right) + \\delta_{\\phi} \\left(- \\frac{Op_3 d}{r^{2} S_{\\theta}}\\right)}{r S_{\\theta}}','\\chi_5d')
+    s9 = s8.replace('\\frac{- \\delta_r \\left(- Op_1 g S_{\\theta}\\right) + \\delta_{\\phi} \\left(- \\frac{Op_3 g}{r^{2} S_{\\theta}}\\right)}{r S_{\\theta}}','\\chi_5g')
+    s10 = s9.replace('\\frac{- \\delta_r \\left(- Op_1 a S_{\\theta}\\right) + \\delta_{\\phi} \\left(- \\frac{Op_3 a}{r^{2} S_{\\theta}}\\right)}{r S_{\\theta}}','\\chi_5a')
+    s11 = s10.replace('\\frac{- \\delta_r \\left(- Op_1 b S_{\\theta}\\right) + \\delta_{\\phi} \\left(- \\frac{Op_3 b}{r^{2} S_{\\theta}}\\right)}{r S_{\\theta}}','\\chi_5b')
+    s12 = s11.replace('\\frac{- \\delta_{\\phi} \\left(- \\frac{Op_2 d}{S_{\\theta}}\\right) + \\delta_{\\theta} \\left(- Op_1 d S_{\\theta}\\right)}{r^{2} S_{\\theta}}','\\chi_6d')
+    s13 = s12.replace('\\frac{- \\delta_{\\phi} \\left(- \\frac{Op_2 g}{S_{\\theta}}\\right) + \\delta_{\\theta} \\left(- Op_1 g S_{\\theta}\\right)}{r^{2} S_{\\theta}}','\\chi_6g')
+    s14 = s13.replace('\\frac{- \\delta_{\\phi} \\left(- \\frac{Op_2 a}{S_{\\theta}}\\right) + \\delta_{\\theta} \\left(- Op_1 a S_{\\theta}\\right)}{r^{2} S_{\\theta}}','\\chi_6a')
+    s15 = s14.replace('\\frac{- \\delta_{\\phi} \\left(- \\frac{Op_2 b}{S_{\\theta}}\\right) + \\delta_{\\theta} \\left(- Op_1 b S_{\\theta}\\right)}{r^{2} S_{\\theta}}','\\chi_6b')
+    s16 = s15.replace('\\frac{\\delta_r \\left(- \\frac{Op_2 d}{S_{\\theta}}\\right) - \\delta_{\\theta} \\left(- \\frac{Op_3 d}{r^{2} S_{\\theta}}\\right)}{r}','\\chi_7d')
+    s17 = s16.replace('\\frac{\\delta_r \\left(- \\frac{Op_2 g}{S_{\\theta}}\\right) - \\delta_{\\theta} \\left(- \\frac{Op_3 g}{r^{2} S_{\\theta}}\\right)}{r}','\\chi_7g')
+    s18 = s17.replace('\\frac{\\delta_r \\left(- \\frac{Op_2 a}{S_{\\theta}}\\right) - \\delta_{\\theta} \\left(- \\frac{Op_3 a}{r^{2} S_{\\theta}}\\right)}{r}','\\chi_7a')
+    s19 = s18.replace('\\frac{\\delta_r \\left(- \\frac{Op_2 b}{S_{\\theta}}\\right) - \\delta_{\\theta} \\left(- \\frac{Op_3 b}{r^{2} S_{\\theta}}\\right)}{r}','\\chi_7b')
+    return s19
+
+#then
+#basically more simplifactions when i see a layer of abstraction
+#at the end also fixed how there were still some leftover double partials
+#i rly don't think it matters much where this happens in the sequence since supposedly i can just run these funcs together
+##############NOOOOOOOOTE this is the func which PRINTS does not return
+def abs3(s0):
+    s1 = s0.replace('\\frac{Op_1 d}{r}','\\Chi_8d')
+    s2 = s1.replace('\\frac{Op_1 g}{r}','\\Chi_8g')
+    s3 = s2.replace('\\frac{Op_1 a}{r}','\\Chi_8a')
+    s4 = s3.replace('\\frac{Op_1 b}{r}','\\Chi_8b')
+    s5 = s4.replace('\\frac{Op_3 d}{r^{2} S_{\\theta}}','\\chi_9d')
+    s6 = s5.replace('\\frac{Op_3 g}{r^{2} S_{\\theta}}','\\chi_9g')
+    s7 = s6.replace('\\frac{Op_3 a}{r^{2} S_{\\theta}}','\\chi_9a')
+    s8 = s7.replace('\\frac{Op_3 b}{r^{2} S_{\\theta}}','\\chi_9b')
+    s9 = s8.replace('\\frac{Op_2 d}{r S_{\\theta}}','\\chi_{10}d')
+    s10 = s9.replace('\\frac{Op_2 g}{r S_{\\theta}}','\\chi_{10}g')
+    s11 = s10.replace('\\frac{Op_2 a}{r S_{\\theta}}','\\chi_{10}a')
+    s12 = s11.replace('\\frac{Op_2 b}{r S_{\\theta}}','\\chi_{10}b')
+    s13 = s12.replace('\\frac{\\partial^{2}}{\\partial \\theta^{2}}','\\delta_{\\theta\\theta}')
+    s14 = s13.replace('\\frac{\\partial^{2}}{\\partial \\phi^{2}}','\\delta_{\\phi\\phi}')
+    s15 = s14.replace('\\frac{\\partial^{2}}{\\partial r^{2}}','\\delta_{rr}')
+    return s15
+    
+    
+#ok we actually do have some abstractions available, but it's just 1 layer. i kind of had a feeling the last layers would look diff
+def abs4(s0):
+    s1 = s0.replace('\\frac{\\chi_2 d}{r S_{\\theta}}','\\chi_{11}d')
+    s2 = s1.replace('\\frac{\\chi_2 g}{r S_{\\theta}}','\\chi_{11}g')
+    s3 = s2.replace('\\frac{\\chi_2 a}{r S_{\\theta}}','\\chi_{11}a')
+    s4 = s3.replace('\\frac{\\chi_2 b}{r S_{\\theta}}','\\chi_{11}b')
+    s5 = s4.replace('\\frac{- \\delta_r \\left(- \\chi_1 d S_{\\theta}\\right) + \\delta_{\\phi} \\left(- \\frac{\\chi_3 d}{r^{2} S_{\\theta}}\\right)}{r S_{\\theta}}','\\chi_{12}d')
+    s6 = s5.replace('\\frac{- \\delta_r \\left(- \\chi_1 g S_{\\theta}\\right) + \\delta_{\\phi} \\left(- \\frac{\\chi_3 g}{r^{2} S_{\\theta}}\\right)}{r S_{\\theta}}','\\chi_{12}g')
+    s7 = s6.replace('\\frac{- \\delta_r \\left(- \\chi_1 a S_{\\theta}\\right) + \\delta_{\\phi} \\left(- \\frac{\\chi_3 a}{r^{2} S_{\\theta}}\\right)}{r S_{\\theta}}','\\chi_{12}a')
+    s8 = s7.replace('\\frac{- \\delta_r \\left(- \\chi_1 b S_{\\theta}\\right) + \\delta_{\\phi} \\left(- \\frac{\\chi_3 b}{r^{2} S_{\\theta}}\\right)}{r S_{\\theta}}','\\chi_{12}b')
+    #\frac{\chi_3 g}{r^{2} S_{\theta}} was an adjustment, 3 and r^2
+    s9 = s8.replace('\\frac{\\chi_3 d}{r^{2} S_{\\theta}}','\\chi_{13}d')
+    s10 = s9.replace('\\frac{\\chi_3 g}{r^{2} S_{\\theta}}','\\chi_{13}g')           
+    s11 = s10.replace('\\frac{\\chi_3 a}{r^{2} S_{\\theta}}','\\chi_{13}a')
+    s12 = s11.replace('\\frac{\\chi_3 b}{r^{2} S_{\\theta}}','\\chi_{13}b')
+                      #\\frac{- \\delta_{\\phi} \\left(- \\frac{\\chi_2 d}{S_{\\theta}}\\right) + \\delta_{\\theta} \\left(- \\chi_1 d S_{\\theta}\\right)}{r^{2} S_{\\theta}}                                                                                                                 
+    s13 = s12.replace('\\frac{- \\delta_{\\phi} \\left(- \\frac{\\chi_2 d}{S_{\\theta}}\\right) + \\delta_{\\theta} \\left(- \\chi_1 d S_{\\theta}\\right)}{r^{2} S_{\\theta}}','\\chi_{14}d')
+    s14 = s13.replace('\\frac{- \\delta_{\\phi} \\left(- \\frac{\\chi_2 g}{S_{\\theta}}\\right) + \\delta_{\\theta} \\left(- \\chi_1 g S_{\\theta}\\right)}{r^{2} S_{\\theta}}','\\chi_{14}g')
+    s15 = s14.replace('\\frac{- \\delta_{\\phi} \\left(- \\frac{\\chi_2 a}{S_{\\theta}}\\right) + \\delta_{\\theta} \\left(- \\chi_1 a S_{\\theta}\\right)}{r^{2} S_{\\theta}}','\\chi_{14}a')
+    s16 = s15.replace('\\frac{- \\delta_{\\phi} \\left(- \\frac{\\chi_2 b}{S_{\\theta}}\\right) + \\delta_{\\theta} \\left(- \\chi_1 b S_{\\theta}\\right)}{r^{2} S_{\\theta}}','\\chi_{14}b')
+    
+    
+    s17 = s16.replace('\\frac{\\chi_1 g}{r}','\\chi_{15}g')
+    s18 = s17.replace('\\frac{\\chi_1 d}{r}','\\chi_{15}d')
+    s19 = s18.replace('\\frac{\\chi_1 a}{r}','\\chi_{15}a')
+    s20 = s19.replace('\\frac{\\chi_1 b}{r}','\\chi_{15}b')
+    
+    s21 = s20.replace('\\frac{\\delta_r \\left(- \\frac{\\chi_2 d}{S_{\\theta}}\\right) - \\delta_{\\theta} \\left(- \\chi_{13}d\\right)}{r}','\\chi_{16}d')
+    s22 = s21.replace('\\frac{\\delta_r \\left(- \\frac{\\chi_2 g}{S_{\\theta}}\\right) - \\delta_{\\theta} \\left(- \\chi_{13}g\\right)}{r}','\\chi_{16}g')
+    s23 = s22.replace('\\frac{\\delta_r \\left(- \\frac{\\chi_2 a}{S_{\\theta}}\\right) - \\delta_{\\theta} \\left(- \\chi_{13}a\\right)}{r}','\\chi_{16}a')
+    s24 = s23.replace('\\frac{\\delta_r \\left(- \\frac{\\chi_2 b}{S_{\\theta}}\\right) - \\delta_{\\theta} \\left(- \\chi_{13}b\\right)}{r}','\\chi_{16}b')
+    #s1 = s0.replace()
+    return s24
+
+def abs5(s0):
+    s1 = s0.replace('_{\\left(t,r,\\theta,\\phi \\right)}','')
+    return s1
+
+def abs6(s0):
+    s1 = s0.replace('Ur','U_r')
+    s2 = s1.replace('Uth','U_{\\theta}')
+    s3 = s2.replace('Uph','U_{\\phi}')
+    s4 = s3.replace('Br','B_r')
+    s5 = s4.replace('Bth','B_{\\theta}')
+    s6 = s5.replace('Bph','B_{\\phi}')
+    s7 = s6.replace('Wr','W_r')
+    s8 = s7.replace('Wth','W_{\\theta}')
+    s9 = s8.replace('Wph','W_{\\phi}')
+    return s9
+
+def abs7(s0):
+    s1 = s0.replace('\\left(','\\big(')
+    s2 = s1.replace('\\right)','\\big)')
+    s3 = s2.replace('{\\big(r,\\theta,\\phi \\big)}','')
+    return s3
+
+def PrettyPrintTrimmedArgs(symp0):
+    s0 = LatexNoAlignTrim2(symp0)
+    s1 = abstracter(s0)
+    s2 = abs2(s1)
+    s3 = abs3(s2)
+    s4 = abs4(s3)
+    s5 = '\\scriptscriptstyle ' + s4
+    s6 = abs5(s5)
+    s7 = abs6(s6)
+    s8 = abs7(s7)
+    print(s8)
+    
+def PrettyPrintIRL(symp0):
+    s0 = LatexNoAlignTrim2(symp0)
+    s1 = abstracter(s0)
+    s2 = abs2(s1)
+    s3 = abs3(s2)
+    s4 = abs4(s3)
+    s5 = '\\scriptscriptstyle ' + s4
+    s6 = abs6(s5)
+    print(s6)     
+
+
+#########################################
+#end of string functions
+#start of sympy code
+
+
+#this cell is meant to encapsulate what we currently have up and running in it's entirety
+#this is the new formulation according to what Henry has in his notes this week 
+
+#imports
+import sympy as symp
+from sympy.vector import *
+from sympy import * 
+from sympy import Ynm, Symbol, simplify
+from sympy.abc import n,m
+from sympy.physics.vector import *
+from sympy.functions.special.spherical_harmonics import Ynm
+import re
+import numpy as np
+
+n, m = symbols('n m', integer=True)
+#printing
+init_printing(use_latex=True)
+
+#coordinate system, child being spherical
+Coord = CoordSys3D('Coord', variable_names=("x", "y", "z"))
+c = Coord.create_new('c',transformation='spherical',variable_names=("r", "theta", "phi"))
+delop = Del()
+
+#parameters/variables
+t, j, k, R1, R2, R3, R4, xi, Q, E, Rcmb, p = symbols('t j k R1 R2 R3 R4 xi Q E Rcmb p')
+
+#basic field functions
+#velocity
+Ur = Function('Ur')(t,c.r,c.theta,c.phi)
+Uth = Function('Uth')(t,c.r,c.theta,c.phi)
+Uph = Function('Uph')(t,c.r,c.theta,c.phi)
+#vorticity
+Wr = Function('Wr')(t,c.r,c.theta,c.phi)
+Wth = Function('Wth')(t,c.r,c.theta,c.phi)
+Wph = Function('Wph')(t,c.r,c.theta,c.phi)
+#mag
+Br = Function('Br')(t,c.r,c.theta,c.phi)
+Bth = Function('Bth')(t,c.r,c.theta,c.phi)
+Bph = Function('Bph')(t,c.r,c.theta,c.phi)
+#fields
+T = Function('T')(t,c.r,c.theta,c.phi)
+P = Function('P')(t,c.r,c.theta,c.phi)
+U = Ur*c.i + Uth*c.j + Uph*c.k
+B = Br*c.i + Bth*c.j + Bph*c.k
+W = Wr*c.i + Wth*c.j + Wph*c.k
+pos = c.r*c.i + c.theta*c.j + c.phi*c.k #position field
+posScaled = c.r*c.i + c.r*c.theta*c.j + c.r*sin(c.theta)*c.phi*c.k
+
+#definition of vorticity
+WEasy = delop.cross(U)
+
+#momentum equation
+mo1_1 =R1*U.diff(t)
+mo1_2 = R1*U.dot(delop.gradient(U))#i think this is a valid way to handle advection but maybe re-examine, here i treat like a right to left operator
+mo2 = 2*(Coord.k).cross(U)
+mo3 = -delop.gradient(P)
+mo4 = (delop.cross(B)).cross(B)
+mo5 = E*laplacian(U)
+mo6 = R2*(T)*(posScaled/Rcmb)
+momentum = Eq(mo1_1+mo1_2,-mo2 + mo3+mo4+mo5+mo6)
+
+F = Function('F')(t,c.r,c.theta,c.phi) #function to encapsulate coriolis, lorentz, diffusion, and buoyancy
+F = mo2 + mo4 + mo5 + mo6
+momentum2 = Eq(mo1_1+mo1_2,F + mo3)
+
+#magnetic induction
+induc1 = B.diff(t)
+induc2 = laplacian(B)
+induc3 = delop.cross(U.cross(B))
+induction = Eq(induc1,induc2+induc3)
+
+#temperature evolution
+Temp1 = T.diff(t)
+Temp2 = R3*laplacian(T)
+Temp3 = -U.dot(delop.gradient(T))
+Temp4 = Q
+Temperature = Eq(Temp1 - Temp3, Temp2)
+
+#curl of momentum equation, in other words vorticity evolution
+mow1 =  W.diff(t) 
+mow2 = U.dot(delop.gradient(W))
+mow3 = W.dot(delop.gradient(U))
+mow4 = delop.cross(F)
+Vorticity = Eq(mow1 + mow2, mow3 + mow4)
+#VorticityEasy = delop.cross(momentum) ##gave an error for some reason but should be a reasonable way to cross check diff methods of getting to same equations
+
+#solenoidal field representation
+Lambda = -delop.cross(posScaled)
+
+a = Function('a')(c.r,c.theta,c.phi,t)
+b = Function('b')(c.r,c.theta,c.phi,t)
+
+uExpDef = delop.cross(Lambda*a) + Lambda*b
+
+d = Function('d')(c.r,c.theta,c.phi,t)
+g = Function('g')(c.r,c.theta,c.phi,t)
+
+bExpDef = delop.cross(Lambda*d) + Lambda*g
+
+T2 = Function('T2')(c.r,c.theta,c.phi)
+temp = T2
+wExpDefProper = -Lambda*Laplacian(a)+delop.cross(Lambda*b)
+wExpDefEasy = delop.cross(uExpDef)
+#also need to do alternative representations of lambda and del
+#lambda -(theta.hat/sintheta)(partial phi)+ (phi.hat)(partial theta)
+#spherical del it is what it isss
+
+#field expression components
+uExpDefr = uExpDef.dot(c.i)
+uExpDefth = uExpDef.dot(c.j)
+uExpDefph = uExpDef.dot(c.k)
+bExpDefr = bExpDef.dot(c.i)
+bExpDefth = bExpDef.dot(c.j)
+bExpDefph = bExpDef.dot(c.k)
+wExpDefr = wExpDefProper.dot(c.i)
+wExpDefth = wExpDefProper.dot(c.j)
+wExpDefph = wExpDefProper.dot(c.k)
+
+#ok then we can try to sub all this into the equalities
+mo1_1s = mo1_1.subs({Ur:uExpDefr,Uth:uExpDefth,Uph:uExpDefph}) #u diff
+mo1_2s = mo1_2.subs({Ur:uExpDefr,Uth:uExpDefth,Uph:uExpDefph}) #advection
+mo2s = mo2.subs({Ur:uExpDefr,Uth:uExpDefth,Uph:uExpDefph}) #coriolis 
+#mo3 = mo3.subs({})#pressure, need to write a func
+mo4s = mo4.subs({Br:bExpDefr,Bth:bExpDefth,Bph:bExpDefph}) #lorentz forcing
+mo5s = mo5.subs({Ur:uExpDefr,Uth:uExpDefth,Uph:uExpDefph}) # laplacian
+mo6s = mo6.subs({T:temp}) #buoyancy
+induc1s = induc1.subs({Br:bExpDefr,Bth:bExpDefth,Bph:bExpDefph})
+induc2s = induc2.subs({Br:bExpDefr,Bth:bExpDefth,Bph:bExpDefph})
+induc3s = induc3.subs({Ur:uExpDefr,Uth:uExpDefth,Uph:uExpDefph,Br:bExpDefr,Bth:bExpDefth,Bph:bExpDefph})
+temp1s = Temp1.subs({T:temp})
+temp2s = Temp2.subs({T:temp})
+temp3s = Temp3.subs({Ur:uExpDefr,Uth:uExpDefth,Uph:uExpDefph,T:temp})
+#temp4 = temp4.subs() this doesnt have a sub, it's Q. not yet at least lol idk 
+mow1s = mow1.subs({Wr:wExpDefr,Wth:wExpDefth,Wph:wExpDefph})
+mow2s = mow2.subs({Ur:uExpDefr,Uth:uExpDefth,Uph:uExpDefph,Wr:wExpDefr,Wth:wExpDefth,Wph:wExpDefph})
+mow3s = mow3.subs({Ur:uExpDefr,Uth:uExpDefth,Uph:uExpDefph,Wr:wExpDefr,Wth:wExpDefth,Wph:wExpDefph})
+#mow4 = mow4.subs({}) this term is big, im gonna run it elsewhere and possibly split it up
+
+#decon recon of the substituted induction equation since was testing on the smallest diff eq of the set
+induc1Set = vecSplitter(induc1s)
+induc2SetNegative = vecSplitter((-1)*induc2s)
+induc3SetNegative = vecSplitter((-1)*induc3s)
+inducTestFull3 = [induc1Set,induc2SetNegative,induc3SetNegative]
+Itest3, Jtest3, Ktest3 = BeegSplitter2(inducTestFull3)
+
+
+#then holdup, Henry wants a representation whic uses both so it would look something like this then 
+
+from sympy import symbols, Sum, Function, oo, symbols#, spherical_jn   #SphericalHarmonicY, symbols
+#from sympy.functions.special.spherical_harmonics import Ynm
+from sympy.functions.special.spherical_harmonics import Ynm
+from sympy.abc import t
+from sympy import Symbol, jn, yn, sin, cos, expand_func, besselj, bessely
+#from sympy.functions.special.spherical_bessel import spherical_jn
+
+
+# Create symbolic variables
+l, m, n = symbols('l m n', integer=True)
+Jc, Yc = symbols('Jc Yc')
+# Create symbolic functions
+S = Function('S')(l, m, n, t)
+
+#X = spherical_jn(n, c.r)
+X = Jc*jn(n,c.r) + Yc*yn(n,c.r)
+
+Y = Ynm(l, m, c.theta, c.phi)
+# Create the nested sums
+nested_sum = Sum(Sum(Sum(S*X*Y, (m, -l, l)), (l, 0, oo)), (n, 1, oo))
+# Print or use the nested sum
+
+#more work to try and simplify/decon&recon of the differential equations with the goal of more printable/interpretable results for Henry
+tempExp = temp1s - temp2s + temp3s
+mo1_1Set = vecSplitter(mo1_1s)
+mo2SetNegative = vecSplitter((-1)*mo2s)
+mo3SetNegative = vecSplitter((-1)*mo3)
+mo4SetNegative = vecSplitter((-1)*mo4s)
+mo5SetNegative = vecSplitter((-1)*mo5s)
+mo6SetNegative = vecSplitter((-1)*mo6s)
+
+#alternative definition of advection term
+mo1_2Alt = 0.5 * delop.gradient(U.dot(U)) - U.cross(delop.cross(U)) #think this corresponds to symmetric antisymmetric components
+mo1_2Alts = mo1_2Alt.subs({Ur:uExpDefr,Uth:uExpDefth,Uph:uExpDefph}) 
+mo1_2AltSet = vecSplitter(mo1_2Alts)
+MoTestFull3 = [mo1_1Set, mo1_2AltSet, mo2SetNegative,mo3SetNegative,mo4SetNegative,mo5SetNegative,mo6SetNegative]
+MoI, MoJ, MoK = BeegSplitter2(MoTestFull3)
+
+
+#######more testing of sympy allowances with diff eq manipulation
+induc1SetTest = vecSplitter(induc1)
+induc2SetNegativeTest = vecSplitter((-1)*induc2)
+induc3SetNegativeTest = vecSplitter((-1)*induc3)
+inducTestFull3Test = [induc1SetTest,induc2SetNegativeTest,induc3SetNegativeTest]
+Itest3Test, Jtest3Test, Ktest3Test = BeegSplitter2(inducTestFull3Test)
+
+#substitutions
+mo1_1s = mo1_1.subs({Ur:uExpDefr,Uth:uExpDefth,Uph:uExpDefph}) #u diff
+mo1_2s = mo1_2.subs({Ur:uExpDefr,Uth:uExpDefth,Uph:uExpDefph}) #advection
+mo2s = mo2.subs({Ur:uExpDefr,Uth:uExpDefth,Uph:uExpDefph}) #coriolis 
+#mo3 = mo3.subs({})#pressure, need to write a func
+mo4s = mo4.subs({Br:bExpDefr,Bth:bExpDefth,Bph:bExpDefph}) #lorentz forcing
+mo5s = mo5.subs({Ur:uExpDefr,Uth:uExpDefth,Uph:uExpDefph}) # laplacian
+mo6s = mo6.subs({T:temp}) #buoyancy
+induc1s = induc1.subs({Br:bExpDefr,Bth:bExpDefth,Bph:bExpDefph})
+induc2s = induc2.subs({Br:bExpDefr,Bth:bExpDefth,Bph:bExpDefph})
+induc3s = induc3.subs({Ur:uExpDefr,Uth:uExpDefth,Uph:uExpDefph,Br:bExpDefr,Bth:bExpDefth,Bph:bExpDefph})
+temp1s = Temp1.subs({T:temp})
+temp2s = Temp2.subs({T:temp})
+temp3s = Temp3.subs({Ur:uExpDefr,Uth:uExpDefth,Uph:uExpDefph,T:temp})
+#temp4 = temp4.subs() this doesnt have a sub, it's Q. not yet at least lol idk 
+mow1s = mow1.subs({Wr:wExpDefr,Wth:wExpDefth,Wph:wExpDefph})
+mow2s = mow2.subs({Ur:uExpDefr,Uth:uExpDefth,Uph:uExpDefph,Wr:wExpDefr,Wth:wExpDefth,Wph:wExpDefph})
+mow3s = mow3.subs({Ur:uExpDefr,Uth:uExpDefth,Uph:uExpDefph,Wr:wExpDefr,Wth:wExpDefth,Wph:wExpDefph})
+
+#components of original equation terms for closer comparison with post-substitution terms of the same kind
+mo5i = mo5.dot(c.i)
+mo5j = mo5.dot(c.j)
+mo5k = mo5.dot(c.k)
+induc2i = induc2.dot(c.i)
+induc2j = induc2.dot(c.j)
+induc2k = induc2.dot(c.k)
+curlF2 = delop.cross(mo2)
+curlF4 = delop.cross(mo4)
+curlF5 = delop.cross(mo5)
+curlF6 = delop.cross(mo6)
+mow4_1s = curlF2.subs({Ur:uExpDefr,Uth:uExpDefth,Uph:uExpDefph})
+mow4_2s = curlF4.subs({Br:bExpDefr,Bth:bExpDefth,Bph:bExpDefph})
+mow4_3s = curlF5.subs({Ur:uExpDefr,Uth:uExpDefth,Uph:uExpDefph})
+mow4_4s = curlF6.subs({T:temp})
+mo1_2Alts = mo1_2Alt.subs({Ur:uExpDefr,Uth:uExpDefth,Uph:uExpDefph})
+
+#going to define all of the component object for easier printing
+mo1_1si = mo1_1s.dot(c.i)
+#mo1_2si = mo1_2s.dot(c.i)
+mo2si = mo2s.dot(c.i)
+mo4si = mo4s.dot(c.i)
+mo5si = mo5s.dot(c.i)
+induc1si =induc1s.dot(c.i)
+induc2si = induc2s.dot(c.i)
+induc3si = induc3s.dot(c.i)
+#temp3si = temp3s.dot(c.i)
+mow1si = mow1s.dot(c.i)
+#mow2si = mow2s.dot(c.i)
+#mow3si = mow3s.dot(c.i)
+mow4_1si = mow4_1s.dot(c.i)
+mow4_2si = mow4_2s.dot(c.i)
+mow4_3si = mow4_3s.dot(c.i)
+mo1_1sj = mo1_1s.dot(c.j)
+#mo1_2sj = mo1_2s.dot(c.j)
+mo2sj =mo2s.dot(c.j) 
+mo4sj =mo4s.dot(c.j) 
+mo5sj =mo5s.dot(c.j) 
+induc1sj =induc1s.dot(c.j)
+induc2sj = induc2s.dot(c.j)
+induc3sj = induc3s.dot(c.j)
+#temp3sj = temp3s.dot(c.j)
+mow1sj = mow1s.dot(c.j)
+#mow2sj = mow2s.dot(c.j)
+#mow3sj = mow3s.dot(c.j)
+mow4_1sj = mow4_1s.dot(c.j)
+mow4_2sj = mow4_2s.dot(c.j)
+mow4_3sj = mow4_3s.dot(c.j)
+mo1_1sk = mo1_1s.dot(c.k)
+#mo1_2sk = mo1_2s.dot(c.k)
+mo2sk = mo2s.dot(c.k)
+mo4sk = mo4s.dot(c.k)
+mo5sk = mo5s.dot(c.k)
+induc1sk =induc1s.dot(c.k)
+induc2sk = induc2s.dot(c.k)
+induc3sk = induc3s.dot(c.k)
+#temp3sk = temp3s.dot(c.k)
+mow1sk = mow1s.dot(c.k)
+#mow2sk = mow2s.dot(c.k)
+#mow3sk = mow3s.dot(c.k)
+mow4_1sk = mow4_1s.dot(c.k)
+mow4_2sk = mow4_2s.dot(c.k)
+mow4_3sk = mow4_3s.dot(c.k)
+
+#############################################9/15/23 update (before git commit)
+#here is where the code was when Henry passed away, was conducting a lot of testing and such to make sure the system 
+#1-accurately reflected the math within the theoretical analysis we were springboarding off of
+#2-was interpretable, had tons of issues getting long math expressions to print more nicely but mostly sorted it out
+#3-system should hold up upon further testing as we coupled with other python codes such as DDF class and PADM2M dataset
+
+#goal was to use this theoretical system to conduct the galerkin approximation upon the geodynamo system ie reducing the high dimensional dynamics of the dynamical systemdown to a small set of ideally ordinary differential equations a la Lorenz 63'
+#unfortunately upon Henry's untimely passing I let the project lie. Still plan on basing much of my dissertation upon a project to combine & automate some of the key methods of the Abarbanel group such as data assimilation, data-driven forecasting, and some of my systems such as this one 
+#then the goal was for the dissertation to be about the building and testing of a generalized dynamical system forecasting algorithm, idea being to incorporate some of the new LLM tech to build an automated 'researcher bot' which, given some data and context, can help any given scientist classify, analyze, and forecast their dynamical system of choice
+
+
+#after running this code and the printing functions code, the way to test outputs and push things furhter is 
+#PrettyPrintIRL(SYMPYOBJECT) => if run correctly should output latex to copy paste for paper building
